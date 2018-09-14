@@ -1,0 +1,209 @@
+<html>
+    <head>
+		<meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
+        <script type="text/javascript">
+            var now_num = 3;
+            function alertNUm() {
+                // alert(now_num);
+            }
+            function addInput() {
+                now_num ++;
+                //table对象
+                var table = document.getElementById("tblarea");
+                //行数
+                var rowCount = table.rows.length;
+                //添加到最后一行
+                var newRow = table.insertRow(rowCount);
+                //添加ID
+                newRow.id = now_num;
+                //给第一列添加
+                var newCell1 = newRow.insertCell(0);
+                //价格
+                newCell1.innerHTML = "<input type=\"text\" id=\"price" + now_num + "\" style=\"border: 1px solid black\";/>";
+                //给第二列添加
+                var newCell2 = newRow.insertCell(1);
+                //菜名
+                newCell2.innerHTML = "<input type=\"text\" id=\"name" + now_num + "\" style=\"border: 1px solid black\";/>";
+                //给第三列添加
+                var newCell3 = newRow.insertCell(2);
+                //重置按钮
+                newCell3.innerHTML = "<input type=\"button\" id=\"btn" + now_num + "\" value=\"重新填\" onclick=\"clearInput(" + now_num + ")\"/>";
+                //给第四列添加
+                var newCell4 = newRow.insertCell(3);
+                //费用
+                newCell4.innerHTML = "<td><label id=\"lbl" + now_num + "\"></label></td>";
+				
+            }
+            function clearInput(rowId) {
+                var input = document.getElementById("price" + rowId);
+                var name = document.getElementById("name" + rowId);
+				var lbl = document.getElementById("lbl" + rowId);
+                input.value = "";
+                name.value = "";
+				lbl.innerHTML = "";
+            }
+            function caculate() {
+                var s = new Array();
+                var a = new Array()
+                var a_total = 0;
+                var s_total = 0;
+				var process = "";
+                for (var i=1;i<=now_num;i++){
+                    var input = document.getElementById("price" + i);
+                    if (input.value != ""){
+                        var name = document.getElementById("name" + i);
+                        s.push([parseInt(input.value), name.value,i])
+                        s_total += parseInt(input.value);
+                        
+                    }
+                }
+				// process += (">> init s :" + s + "<br/>")
+                var mid = s_total / 2;
+                var last_gap = s_total;                
+                while (true) {
+                    var min_gap = -1
+                    var final_index = -1
+                    for (let index=0;index<s.length;index++){
+                        let temp_total = a_total + s[index][0]
+                        let temp_gap = Math.abs(temp_total - mid)
+                        if (min_gap < 0 || temp_gap < min_gap) {
+							min_gap = temp_gap
+                            final_index = index
+                        }
+                    }
+					
+					if (final_index == -1) {
+						break
+					}
+					// process += (">> final_index " + final_index + "<br/>")
+
+                    // 如果继续运算，比上一次两组间差距更大，退出
+                    if (Math.abs((a_total + s[final_index][0]) - (s_total - s[final_index][0])) > last_gap) {
+                        break
+                    }
+					
+					var element = s[final_index][0];
+					
+                    a_total += element;
+                    a.push(s[final_index])
+					// process += (">> a add " + element + " ==> " + a + "<br/>")
+                    s_total -= element;
+
+                    s.splice(final_index, 1)
+					// process += (">> s delete " + element + " ==> " + s + "<br/>")
+
+                    last_gap = Math.abs(a_total - s_total)
+                }
+                var best, other;
+				var sum_best = 0;
+				var sum_other = 0;
+                
+                if (a_total >= s_total) {
+                    best = a
+                    other = s
+                    sum_best = a_total
+                    sum_other = s_total
+                }
+                else {
+                    best = s
+                    other = a
+                    sum_best = s_total
+                    sum_other = a_total
+                }
+				document.getElementById("result").style.display = "block";
+				process += "<span style=\"color:green\";>下单方案：</span>"
+				process += ("总价：<span style=\"color:green\";>" + sum_best + "</span>  清单：");
+				for (let i=0;i<best.length;i++) {
+					var end = "]、"
+					if (i == best.length - 1) {
+						end = "]"
+					}
+					process += (best[i][0] + "[" + best[i][1] + end)
+                    // 显示价格
+                    // let my_price = Math.round((sum_best * best[i][0]) / (sum_best + sum_other));
+					document.getElementById("lbl" + best[i][2]).innerHTML = Math.round((sum_best * best[i][0]) / (sum_best + sum_other));
+				}
+				process += "<br/>";
+				process += "<span style=\"color:blue\";>另外一组：</span>"
+				process += ("总价：<span style=\"color:blue\";>" + sum_other + "</span>  清单：");
+				for (let i=0;i<other.length;i++) {
+					var end = "]、"
+					if (i == other.length - 1) {
+						end = "]"
+					}
+					process += (other[i][0] + "[" + other[i][1] + end)
+					// 显示价格
+					document.getElementById("lbl" + other[i][2]).innerHTML = Math.round((sum_best * other[i][0]) / (sum_best + sum_other));
+				}
+				process += "<br/>";
+				
+				process += ("可自由挑选<span style=\"color:red\";>" + (sum_best - sum_other) + "</span>元的商品<br/>")
+				document.getElementById("result").innerHTML = process;
+
+            }
+            function test() {
+                var a = new Array();
+                // var b = new Array();
+                for (let i=0;i< 5;i++) {
+                    a.push("haha" + i);
+                }
+                for (let j=0;j< a.length;j ++){
+                    alert(j + " : " + a[j]);
+                }
+                a.splice(2,1);
+                for (let j=0;j< a.length;j ++){
+                    alert(j + " : " + a[j]);
+                }
+                
+            }
+        </script>
+    </head>
+    <body onload="alertNUm()">
+        <span style="color:blue;">绫罗岛买一送一，用我更划算！耶~</span><span>(没有大量测试，不要玩坏了～)</span>
+        <div id="areaInput">
+            <table id="tblarea">
+                <tr>
+                    <td><label>价格</label></td>
+                    <td><label>菜名</label></td>
+                    <td></td>
+					<td></td>
+                </tr>
+                <tr>
+                    <td>
+                        <input type="text" id="price1" style="border: 1px solid black;" />
+                    </td>
+                    <td>
+                        <input type="text" id="name1"  style="border: 1px solid black;" />
+                    </td>
+                    <td><input type="button" id="btn1" value="重新填" onclick="clearInput(1)"/></td>
+					<td><label id="lbl1"></label></td>
+                </tr>
+                <tr>
+                    <td>
+                        <input type="text" id="price2" style="border: 1px solid black;" />
+                    </td>
+                    <td>
+                        <input type="text" id="name2"  style="border: 1px solid black;"/>
+                    </td>
+                    <td><input type="button" id="btn2" value="重新填" onclick="clearInput(2)"/></td>
+					<td><label id="lbl2"></label></td>
+                </tr>
+                <tr>
+                    <td>
+                        <input type="text" id="price3" style="border: 1px solid black;" />
+                    </td>
+                    <td>
+                        <input type="text" id="name3"  style="border: 1px solid black;" />
+                    </td>
+                    <td><input type="button" id="btn3" value="重新填" onclick="clearInput(3)"/></td>
+					<td><label id="lbl3"></label></td>
+                </tr>
+            </table>
+        </div>
+        <input type="button" value="再来一个" onclick="addInput()"><br/><br/><br/>
+        <hr/>
+        <input type="button" value="告诉我怎么下单！！" onclick="caculate()">
+		<div id="result" style="display:none;">
+		</div>
+    </body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工时记录</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px; margin: 5px; cursor: pointer; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+        th { background-color: #f4f4f4; }
+    </style>
+</head>
+<body>
+    <h2>工时记录</h2>
+    <p id="currentDate"></p>
+    <button onclick="checkIn()">打卡</button>
+    <button onclick="checkOut()">签退</button>
+    <h3>今日记录</h3>
+    <p>打卡时间: <span id="checkInTime">--</span></p>
+    <p>签退时间: <span id="checkOutTime">--</span></p>
+    <p>今日工时: <span id="workHours">--</span> 小时</p>
+    
+    <h3>补打卡/补签退</h3>
+    <input type="date" id="manualDate">
+    <input type="time" id="manualTime">
+    <button onclick="manualCheckIn()">补打卡</button>
+    <button onclick="manualCheckOut()">补签退</button>
+    
+    <h3>最近12个月工时统计（按自然周）</h3>
+    <table>
+        <thead>
+            <tr>
+                <th>周</th>
+                <th>日期</th>
+                <th>打卡时间</th>
+                <th>签退时间</th>
+                <th>每日工时</th>
+                <th>周总工时</th>
+            </tr>
+        </thead>
+        <tbody id="weeklySummary"></tbody>
+    </table>
+    
+    <h3>数据管理</h3>
+    <button onclick="exportCSV()">导出CSV</button>
+    <button onclick="confirmClearData()" style="background-color: red; color: white;">清空数据</button>
+    
+    <script>
+        const storageKey = "workHours";
+
+        function getTodayKey() {
+            const today = new Date();
+            return today.toISOString().split('T')[0];
+        }
+
+        function checkIn() {
+            recordTime(getTodayKey(), "checkIn");
+        }
+
+        function checkOut() {
+            recordTime(getTodayKey(), "checkOut");
+        }
+
+        function manualCheckIn() {
+            const date = document.getElementById("manualDate").value;
+            const time = document.getElementById("manualTime").value;
+            if (date && time) recordTime(date, "checkIn", time);
+        }
+
+        function manualCheckOut() {
+            const date = document.getElementById("manualDate").value;
+            const time = document.getElementById("manualTime").value;
+            if (date && time) recordTime(date, "checkOut", time);
+        }
+
+        function recordTime(date, type, time = null) {
+            let data = JSON.parse(localStorage.getItem(storageKey)) || {};
+            if (!data[date]) data[date] = {};
+            data[date][type] = time || new Date().toLocaleTimeString();
+            if (data[date].checkIn && data[date].checkOut) {
+                data[date].workHours = calculateHours(data[date].checkIn, data[date].checkOut);
+            }
+            localStorage.setItem(storageKey, JSON.stringify(data));
+            loadData();
+        }
+
+        function calculateHours(start, end) {
+            const startTime = new Date("1970/01/01 " + start);
+            const endTime = new Date("1970/01/01 " + end);
+            return ((endTime - startTime) / (1000 * 60 * 60)).toFixed(2);
+        }
+
+        function getWeekStart(date) {
+            const d = new Date(date);
+            d.setDate(d.getDate() - d.getDay());
+            return d.toISOString().split('T')[0];
+        }
+
+        function loadData() {
+            const data = JSON.parse(localStorage.getItem(storageKey)) || {};
+            const todayKey = getTodayKey();
+            document.getElementById("currentDate").innerText = `今日日期: ${todayKey}`;
+            document.getElementById("checkInTime").innerText = data[todayKey]?.checkIn || "--";
+            document.getElementById("checkOutTime").innerText = data[todayKey]?.checkOut || "--";
+            document.getElementById("workHours").innerText = data[todayKey]?.workHours || "--";
+
+            const weeklyData = {};
+            const cutoffDate = new Date();
+            cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
+
+            Object.keys(data).forEach(date => {
+                if (new Date(date) < cutoffDate) return;
+                const weekKey = getWeekStart(date);
+                if (!weeklyData[weekKey]) weeklyData[weekKey] = { dates: {} };
+                weeklyData[weekKey].dates[date] = data[date];
+            });
+
+            const sortedWeeks = Object.entries(weeklyData).sort((a, b) => new Date(b[0]) - new Date(a[0]));
+            const tableBody = document.getElementById("weeklySummary");
+            tableBody.innerHTML = "";
+            sortedWeeks.forEach(([week, details]) => {
+                Object.entries(details.dates).forEach(([date, record]) => {
+                    const row = `<tr><td>${week}</td><td>${date}</td><td>${record.checkIn || "--"}</td><td>${record.checkOut || "--"}</td><td>${record.workHours || "--"}h</td><td>${details.totalHours ? details.totalHours.toFixed(2) : "0"}h</td></tr>`;
+                    tableBody.innerHTML += row;
+                });
+            });
+        }
+
+        function exportCSV() {
+            const data = JSON.parse(localStorage.getItem(storageKey)) || {};
+            let csvContent = "日期,打卡时间,签退时间,工时\n";
+            Object.keys(data).forEach(date => {
+                csvContent += `${date},${data[date].checkIn || ""},${data[date].checkOut || ""},${data[date].workHours || ""}\n`;
+            });
+            const blob = new Blob([csvContent], { type: "text/csv" });
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "work_hours.csv";
+            link.click();
+        }
+
+        function confirmClearData() {
+            if (confirm("确定要清空所有数据吗？此操作不可恢复！")) {
+                localStorage.removeItem(storageKey);
+                loadData();
+            }
+        }
+
+        loadData();
+    </script>
+</body>
+</html>

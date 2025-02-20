@@ -1,154 +1,307 @@
 <!DOCTYPE html>
 <html lang="zh">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工时记录</title>
-    <style>
-        body { font-family: Arial, sans-serif; padding: 20px; }
-        button { padding: 10px; margin: 5px; cursor: pointer; }
-        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-        th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
-        th { background-color: #f4f4f4; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>工时记录</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    button { padding: 10px; margin: 5px; cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ddd; padding: 8px; text-align: center; }
+    th { background-color: #f4f4f4; }
+  </style>
+  <!-- 引入 SheetJS 库，用于导出 Excel -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
 </head>
 <body>
-    <h2>工时记录</h2>
-    <p id="currentDate"></p>
-    <button onclick="checkIn()">打卡</button>
-    <button onclick="checkOut()">签退</button>
-    <h3>今日记录</h3>
-    <p>打卡时间: <span id="checkInTime">--</span></p>
-    <p>签退时间: <span id="checkOutTime">--</span></p>
-    <p>今日工时: <span id="workHours">--</span> 小时</p>
-    
-    <h3>补打卡/补签退</h3>
-    <input type="date" id="manualDate">
-    <input type="time" id="manualTime">
-    <button onclick="manualCheckIn()">补打卡</button>
-    <button onclick="manualCheckOut()">补签退</button>
-    
-    <h3>最近12个月工时统计（按自然周）</h3>
-    <table>
-        <thead>
-            <tr>
-                <th>周</th>
-                <th>日期</th>
-                <th>打卡时间</th>
-                <th>签退时间</th>
-                <th>每日工时</th>
-                <th>周总工时</th>
-            </tr>
-        </thead>
-        <tbody id="weeklySummary"></tbody>
-    </table>
-    
-    <h3>数据管理</h3>
-    <button onclick="exportCSV()">导出CSV</button>
-    <button onclick="confirmClearData()" style="background-color: red; color: white;">清空数据</button>
-    
-    <script>
-        const storageKey = "workHours";
+  <h2>工时记录</h2>
+  <p id="currentDate"></p>
+  <button onclick="checkIn()">打卡</button>
+  <button onclick="checkOut()">签退</button>
+  <h3>今日记录</h3>
+  <p>打卡时间: <span id="checkInTime">--</span></p>
+  <p>签退时间: <span id="checkOutTime">--</span></p>
+  <p>今日工时: <span id="workHours">--</span> 小时</p>
+  
+  <h3>补打卡/补签退</h3>
+  <input type="date" id="manualDate">
+  <input type="time" id="manualTime">
+  <button onclick="manualCheckIn()">补打卡</button>
+  <button onclick="manualCheckOut()">补签退</button>
+  
+  <h3>最近12个月工时统计（按自然周）</h3>
+  <table>
+    <thead>
+      <tr>
+        <th>周</th>
+        <th>日期</th>
+        <th>打卡时间</th>
+        <th>签退时间</th>
+        <th>每日工时</th>
+        <th>周总工时</th>
+      </tr>
+    </thead>
+    <tbody id="weeklySummary"></tbody>
+  </table>
+  
+  <h3>数据管理</h3>
+  <button onclick="exportCSV()">导出CSV</button>
+  <button onclick="exportExcel()">导出Excel</button>
+  <button onclick="confirmClearData()" style="background-color: red; color: white;">清空数据</button>
+  
+  <script>
+    const storageKey = "workHours";
 
-        function getTodayKey() {
-            const today = new Date();
-            return today.toISOString().split('T')[0];
+    function getTodayKey() {
+      const today = new Date();
+      return today.toISOString().split('T')[0];
+    }
+
+    function checkIn() {
+      recordTime(getTodayKey(), "checkIn");
+    }
+
+    function checkOut() {
+      recordTime(getTodayKey(), "checkOut");
+    }
+
+    // 补打卡：确保时间的秒数始终为 "00"
+    function manualCheckIn() {
+      const date = document.getElementById("manualDate").value;
+      let time = document.getElementById("manualTime").value;
+      if (date && time) {
+        // 如果输入格式为 HH:MM，则添加 ":00"
+        // 如果包含秒，则将秒部分替换为 "00"
+        if (time.length === 5) {
+          time = time + ":00";
+        } else if (time.length >= 8) {
+          time = time.slice(0,5) + ":00";
         }
+        recordTime(date, "checkIn", time);
+      }
+    }
 
-        function checkIn() {
-            recordTime(getTodayKey(), "checkIn");
+    // 补签退：确保时间的秒数始终为 "00"
+    function manualCheckOut() {
+      const date = document.getElementById("manualDate").value;
+      let time = document.getElementById("manualTime").value;
+      if (date && time) {
+        if (time.length === 5) {
+          time = time + ":00";
+        } else if (time.length >= 8) {
+          time = time.slice(0,5) + ":00";
         }
+        recordTime(date, "checkOut", time);
+      }
+    }
 
-        function checkOut() {
-            recordTime(getTodayKey(), "checkOut");
+    function recordTime(date, type, time = null) {
+      let data = JSON.parse(localStorage.getItem(storageKey)) || {};
+      if (!data[date]) data[date] = {};
+      data[date][type] = time || new Date().toLocaleTimeString();
+      if (data[date].checkIn && data[date].checkOut) {
+        data[date].workHours = calculateHours(data[date].checkIn, data[date].checkOut);
+      }
+      localStorage.setItem(storageKey, JSON.stringify(data));
+      loadData();
+    }
+
+    function calculateHours(start, end) {
+      const startTime = new Date("1970/01/01 " + start);
+      const endTime = new Date("1970/01/01 " + end);
+      return ((endTime - startTime) / (1000 * 60 * 60)).toFixed(2);
+    }
+
+    // 获取当前日期所在的自然周第一天（以周日为起始，可根据需求调整）
+    function getWeekStart(date) {
+      const d = new Date(date);
+      d.setDate(d.getDate() - d.getDay());
+      return d.toISOString().split('T')[0];
+    }
+
+    function loadData() {
+      const data = JSON.parse(localStorage.getItem(storageKey)) || {};
+      const todayKey = getTodayKey();
+      document.getElementById("currentDate").innerText = `今日日期: ${todayKey}`;
+      document.getElementById("checkInTime").innerText = data[todayKey]?.checkIn || "--";
+      document.getElementById("checkOutTime").innerText = data[todayKey]?.checkOut || "--";
+      document.getElementById("workHours").innerText = data[todayKey]?.workHours || "--";
+
+      const weeklyData = {};
+      const cutoffDate = new Date();
+      cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
+
+      Object.keys(data).forEach(date => {
+        if (new Date(date) < cutoffDate) return;
+        const weekKey = getWeekStart(date);
+        if (!weeklyData[weekKey]) {
+          weeklyData[weekKey] = { dates: {} };
         }
+        weeklyData[weekKey].dates[date] = data[date];
+      });
 
-        function manualCheckIn() {
-            const date = document.getElementById("manualDate").value;
-            const time = document.getElementById("manualTime").value;
-            if (date && time) recordTime(date, "checkIn", time);
+      // 计算每周总工时
+      Object.keys(weeklyData).forEach(weekKey => {
+        let sum = 0;
+        Object.values(weeklyData[weekKey].dates).forEach(record => {
+          if (record.workHours) {
+            sum += parseFloat(record.workHours);
+          }
+        });
+        weeklyData[weekKey].totalHours = sum;
+      });
+
+      // 按周倒序排列
+      const sortedWeeks = Object.entries(weeklyData).sort((a, b) => new Date(b[0]) - new Date(a[0]));
+      const tableBody = document.getElementById("weeklySummary");
+      tableBody.innerHTML = "";
+
+      sortedWeeks.forEach(([week, details]) => {
+        // 同一周内日期按升序排列
+        const dates = Object.keys(details.dates).sort((a, b) => new Date(a) - new Date(b));
+        const rowSpan = dates.length;
+        dates.forEach((date, index) => {
+          const record = details.dates[date];
+          let row = "<tr>";
+          if (index === 0) {
+            row += `<td rowspan="${rowSpan}">${week}</td>`;
+            row += `<td>${date}</td>`;
+            row += `<td>${record.checkIn || "--"}</td>`;
+            row += `<td>${record.checkOut || "--"}</td>`;
+            row += `<td>${record.workHours || "--"}h</td>`;
+            row += `<td rowspan="${rowSpan}">${details.totalHours ? details.totalHours.toFixed(2) : "0"}h</td>`;
+          } else {
+            row += `<td>${date}</td>`;
+            row += `<td>${record.checkIn || "--"}</td>`;
+            row += `<td>${record.checkOut || "--"}</td>`;
+            row += `<td>${record.workHours || "--"}h</td>`;
+          }
+          row += "</tr>";
+          tableBody.innerHTML += row;
+        });
+      });
+    }
+
+    // 方案1：导出 CSV，使用留空方式显示同一周的分组效果
+    function exportCSV() {
+      const data = JSON.parse(localStorage.getItem(storageKey)) || {};
+      let csvContent = "周,日期,打卡时间,签退时间,每日工时,周总工时\n";
+
+      let weeklyData = {};
+      for (let date in data) {
+        let weekKey = getWeekStart(date);
+        if (!weeklyData[weekKey]) {
+          weeklyData[weekKey] = { dates: {} };
         }
-
-        function manualCheckOut() {
-            const date = document.getElementById("manualDate").value;
-            const time = document.getElementById("manualTime").value;
-            if (date && time) recordTime(date, "checkOut", time);
+        weeklyData[weekKey].dates[date] = data[date];
+      }
+      for (let weekKey in weeklyData) {
+        let sum = 0;
+        for (let date in weeklyData[weekKey].dates) {
+          if (weeklyData[weekKey].dates[date].workHours) {
+            sum += parseFloat(weeklyData[weekKey].dates[date].workHours);
+          }
         }
+        weeklyData[weekKey].totalHours = sum;
+      }
 
-        function recordTime(date, type, time = null) {
-            let data = JSON.parse(localStorage.getItem(storageKey)) || {};
-            if (!data[date]) data[date] = {};
-            data[date][type] = time || new Date().toLocaleTimeString();
-            if (data[date].checkIn && data[date].checkOut) {
-                data[date].workHours = calculateHours(data[date].checkIn, data[date].checkOut);
-            }
-            localStorage.setItem(storageKey, JSON.stringify(data));
-            loadData();
+      let sortedWeeks = Object.entries(weeklyData).sort((a, b) => new Date(b[0]) - new Date(a[0]));
+      sortedWeeks.forEach(([week, details]) => {
+        let sortedDates = Object.keys(details.dates).sort((a, b) => new Date(a) - new Date(b));
+        sortedDates.forEach((date, index) => {
+          let record = details.dates[date];
+          if (index === 0) {
+            csvContent += `${week},${date},${record.checkIn || ""},${record.checkOut || ""},${record.workHours || ""},${details.totalHours ? details.totalHours.toFixed(2) : "0"}\n`;
+          } else {
+            csvContent += `,${date},${record.checkIn || ""},${record.checkOut || ""},${record.workHours || ""},\n`;
+          }
+        });
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "work_hours.csv";
+      link.click();
+    }
+
+    // 方案2：导出 Excel，使用 SheetJS 并合并单元格
+    function exportExcel() {
+      const data = JSON.parse(localStorage.getItem(storageKey)) || {};
+      let exportData = [];
+      // 表头
+      exportData.push(["周", "日期", "打卡时间", "签退时间", "每日工时", "周总工时"]);
+
+      let weeklyData = {};
+      for (let date in data) {
+        let weekKey = getWeekStart(date);
+        if (!weeklyData[weekKey]) {
+          weeklyData[weekKey] = { dates: {} };
         }
-
-        function calculateHours(start, end) {
-            const startTime = new Date("1970/01/01 " + start);
-            const endTime = new Date("1970/01/01 " + end);
-            return ((endTime - startTime) / (1000 * 60 * 60)).toFixed(2);
+        weeklyData[weekKey].dates[date] = data[date];
+      }
+      for (let weekKey in weeklyData) {
+        let sum = 0;
+        for (let date in weeklyData[weekKey].dates) {
+          if (weeklyData[weekKey].dates[date].workHours) {
+            sum += parseFloat(weeklyData[weekKey].dates[date].workHours);
+          }
         }
+        weeklyData[weekKey].totalHours = sum;
+      }
 
-        function getWeekStart(date) {
-            const d = new Date(date);
-            d.setDate(d.getDate() - d.getDay());
-            return d.toISOString().split('T')[0];
+      let sortedWeeks = Object.entries(weeklyData).sort((a, b) => new Date(b[0]) - new Date(a[0]));
+      // 数据行从第二行开始，行号从 1 开始（0 为表头）
+      let currentRowIndex = 1;
+      sortedWeeks.forEach(([week, details]) => {
+        let sortedDates = Object.keys(details.dates).sort((a, b) => new Date(a) - new Date(b));
+        sortedDates.forEach((date, index) => {
+          let record = details.dates[date];
+          if (index === 0) {
+            exportData.push([week, date, record.checkIn || "", record.checkOut || "", record.workHours || "", details.totalHours ? details.totalHours.toFixed(2) : "0"]);
+          } else {
+            exportData.push(["", date, record.checkIn || "", record.checkOut || "", record.workHours || "", ""]);
+          }
+          currentRowIndex++;
+        });
+      });
+
+      // 生成工作簿和工作表
+      var wb = XLSX.utils.book_new();
+      var ws = XLSX.utils.aoa_to_sheet(exportData);
+
+      // 设置合并单元格：对每一组同一自然周的【周】（第1列）和【周总工时】（第6列）合并单元格
+      let merges = [];
+      let rowIndex = 1; // 数据区域第一行的索引（0 为表头）
+      sortedWeeks.forEach(([week, details]) => {
+        let numRows = Object.keys(details.dates).length;
+        if (numRows > 1) {
+          merges.push({
+            s: { r: rowIndex, c: 0 },
+            e: { r: rowIndex + numRows - 1, c: 0 }
+          });
+          merges.push({
+            s: { r: rowIndex, c: 5 },
+            e: { r: rowIndex + numRows - 1, c: 5 }
+          });
         }
+        rowIndex += numRows;
+      });
+      ws["!merges"] = merges;
 
-        function loadData() {
-            const data = JSON.parse(localStorage.getItem(storageKey)) || {};
-            const todayKey = getTodayKey();
-            document.getElementById("currentDate").innerText = `今日日期: ${todayKey}`;
-            document.getElementById("checkInTime").innerText = data[todayKey]?.checkIn || "--";
-            document.getElementById("checkOutTime").innerText = data[todayKey]?.checkOut || "--";
-            document.getElementById("workHours").innerText = data[todayKey]?.workHours || "--";
+      XLSX.utils.book_append_sheet(wb, ws, "工时记录");
+      XLSX.writeFile(wb, "work_hours.xlsx");
+    }
 
-            const weeklyData = {};
-            const cutoffDate = new Date();
-            cutoffDate.setFullYear(cutoffDate.getFullYear() - 1);
-
-            Object.keys(data).forEach(date => {
-                if (new Date(date) < cutoffDate) return;
-                const weekKey = getWeekStart(date);
-                if (!weeklyData[weekKey]) weeklyData[weekKey] = { dates: {} };
-                weeklyData[weekKey].dates[date] = data[date];
-            });
-
-            const sortedWeeks = Object.entries(weeklyData).sort((a, b) => new Date(b[0]) - new Date(a[0]));
-            const tableBody = document.getElementById("weeklySummary");
-            tableBody.innerHTML = "";
-            sortedWeeks.forEach(([week, details]) => {
-                Object.entries(details.dates).forEach(([date, record]) => {
-                    const row = `<tr><td>${week}</td><td>${date}</td><td>${record.checkIn || "--"}</td><td>${record.checkOut || "--"}</td><td>${record.workHours || "--"}h</td><td>${details.totalHours ? details.totalHours.toFixed(2) : "0"}h</td></tr>`;
-                    tableBody.innerHTML += row;
-                });
-            });
-        }
-
-        function exportCSV() {
-            const data = JSON.parse(localStorage.getItem(storageKey)) || {};
-            let csvContent = "日期,打卡时间,签退时间,工时\n";
-            Object.keys(data).forEach(date => {
-                csvContent += `${date},${data[date].checkIn || ""},${data[date].checkOut || ""},${data[date].workHours || ""}\n`;
-            });
-            const blob = new Blob([csvContent], { type: "text/csv" });
-            const link = document.createElement("a");
-            link.href = URL.createObjectURL(blob);
-            link.download = "work_hours.csv";
-            link.click();
-        }
-
-        function confirmClearData() {
-            if (confirm("确定要清空所有数据吗？此操作不可恢复！")) {
-                localStorage.removeItem(storageKey);
-                loadData();
-            }
-        }
-
+    function confirmClearData() {
+      if (confirm("确定要清空所有数据吗？此操作不可恢复！")) {
+        localStorage.removeItem(storageKey);
         loadData();
-    </script>
+      }
+    }
+
+    loadData();
+  </script>
 </body>
 </html>
